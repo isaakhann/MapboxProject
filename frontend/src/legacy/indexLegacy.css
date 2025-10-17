@@ -1,0 +1,716 @@
+/* ===== App & Base ===== */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+#container {
+  position: relative; /* map + overlayed sidebar */
+  height: 100vh;
+  min-height: 0;
+}
+
+/* Map fixed/full-bleed; always clickable */
+#map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+.mapboxgl-canvas,
+.mapboxgl-canvas-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ===== Sidebar (overlay; map never moves) ===== */
+#filter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 320px;
+  z-index: 1000; /* above the map when visible */
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 8px 0 20px rgba(0, 0, 0, 0.15);
+  overflow: auto;
+  padding: 12px;
+
+  /* hidden off-canvas by default; does not intercept clicks */
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  pointer-events: none;
+  will-change: transform;
+}
+/* Shown when #container has .expanded (toggled by your JS) */
+#container.expanded #filter {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* Toggle button above everything */
+#toggleBtn {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1100;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Sidebar controls */
+#filter label {
+  display: block;
+  font-size: 0.9rem;
+  margin: 6px 0 4px;
+}
+#filter select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #dcdcdc;
+  background: #fff;
+  outline: none;
+  appearance: none;
+}
+#filter .graph-btn {
+  width: 100%;
+  padding: 10px 12px;
+  margin-top: 10px;
+  border-radius: 8px;
+  border: 0;
+  background: #0d6efd;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+#filter .graph-btn:active {
+  transform: translateY(1px);
+}
+
+/* ===== Mapbox popup tweaks (optional) ===== */
+.mapboxgl-popup {
+  max-width: 320px;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica,
+    Arial, sans-serif;
+}
+.mapboxgl-popup-content {
+  padding: 10px 12px;
+}
+
+/* ===== Modals (graph, weather, info) ===== */
+.modal {
+  display: none; /* toggled by JS */
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background-color: rgba(0, 0, 0, 0.55);
+  align-items: center;
+  justify-content: center;
+}
+
+/* Base card */
+.modal .modal-content {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+/* Header bar */
+.modal .modal-header {
+  padding: 10px 12px;
+  background: #0d6efd;
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal .close {
+  color: #fff;
+  font-size: 1.35rem;
+  cursor: pointer;
+}
+
+/* --- Graph modal (sizes; JS may override) --- */
+#graphModal .modal-content {
+  width: 600px;
+}
+
+/* --- Info modal --- */
+#infoModal .modal-content {
+  width: 50vw;
+  max-width: 420px;
+}
+#infoModal .modal-body {
+  padding: 14px;
+  overflow-y: auto;
+  max-height: 70vh;
+  font-size: 0.95rem;
+}
+
+/* --- WEATHER modal: make iframe fill the card --- */
+#weatherModal .modal-content {
+  width: min(1000px, 90vw);
+  height: min(85vh, 820px);
+  display: flex;
+  flex-direction: column; /* header stays at top, iframe fills the rest */
+  min-height: 0; /* allow flex child to shrink on iOS */
+}
+#weatherModal .modal-header {
+  position: sticky; /* keep header visible while iframe scrolls */
+  top: 0;
+  z-index: 1;
+}
+#weatherFrame {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%; /* fill remaining height in the card */
+  border: 0;
+  background: #fff;
+}
+
+/* ===== Responsive tweaks ===== */
+@media (max-width: 768px) {
+  #filter {
+    width: 280px;
+  }
+  #infoModal .modal-content {
+    width: 85vw;
+  }
+  #graphModal .modal-content {
+    width: 90vw;
+  }
+  #weatherModal .modal-content {
+    width: 95vw;
+    height: 85vh;
+  }
+}
+/* ----- Auth (login) styles ----- */
+.auth-screen {
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  background: #0b0b0c;
+}
+.auth-card {
+  width: min(420px, 92vw);
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  padding: 18px;
+  display: grid;
+  gap: 10px;
+}
+.auth-card h2 {
+  margin: 0 0 6px;
+}
+.auth-card input,
+.auth-card select {
+  padding: 10px 12px;
+  border: 1px solid #dcdcdc;
+  border-radius: 8px;
+  font: inherit;
+}
+.auth-btn {
+  background: #0d6efd;
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.auth-error {
+  color: #b00020;
+  font-size: 0.9rem;
+}
+.auth-msg {
+  color: #0a7a2f;
+  font-size: 0.9rem;
+}
+.auth-hint {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+/* ----- Settings button (top-right) ----- */
+#settingsBtn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 1200;
+  background: #0d6efd;
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ----- Role-based UI gates (no JS changes needed) ----- */
+.role-user #filter .graph-btn {
+  display: none !important;
+} /* hide Scatter/Histogram/Interactive/About */
+/* ===== Full-page Login ===== */
+/* ========= Login (polished, no overlap) ========= */
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(
+    1200px 600px at -10% 0%,
+    #eef2f7 0%,
+    #e7ecf4 55%,
+    #e9edf6 100%
+  );
+}
+
+.login-grid {
+  width: min(1200px, 92vw);
+  display: grid;
+  grid-template-columns: 520px 1fr; /* left form | right hero */
+  gap: 48px;
+  align-items: center;
+}
+
+/* Card */
+.login-card {
+  background: #fff;
+  border: 1px solid #ecf0f6;
+  border-radius: 22px;
+  box-shadow: 0 24px 60px rgba(31, 41, 55, 0.14);
+  padding: 26px 24px;
+  color: #0b1020;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.brand-badge {
+  width: 43px;
+  height: 42px;
+  border-radius: 12px;
+  background: conic-gradient(from 180deg at 50% 50%, #2ecc71, #0d6efd, #2ecc71);
+  box-shadow: 0 10px 22px rgba(13, 110, 253, 0.25);
+}
+.login-title {
+  margin: 0;
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.login-sub {
+  margin: 2px 0 14px;
+  color: #5b6476;
+}
+
+.field-label {
+  font-weight: 650;
+  font-size: 0.95rem;
+  color: #1f2937;
+  margin: 10px 0 6px;
+}
+.field {
+  position: relative;
+}
+.icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #8390a7;
+}
+.input {
+  width: 100%;
+  padding: 12px 12px 12px 40px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #d9dee8;
+  font: inherit;
+  outline: none;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.05s;
+}
+.input:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 6px rgba(13, 110, 253, 0.12);
+}
+.input:active {
+  transform: translateY(0.5px);
+}
+
+.login-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 6px;
+}
+.remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+}
+.link {
+  color: #0d6efd;
+  font-weight: 600;
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+
+.auth-error {
+  background: #fff1f2;
+  color: #b00020;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 6px 0 10px;
+  font-size: 0.92rem;
+}
+.auth-hint {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin-top: 6px;
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #0ea5e9, #0d6efd);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: 0 12px 28px rgba(13, 110, 253, 0.3);
+  cursor: pointer;
+  transition: transform 0.06s, filter 0.2s, box-shadow 0.2s;
+}
+.btn-primary:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 14px 32px rgba(13, 110, 253, 0.35);
+}
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+/* Hero panel */
+.hero-panel {
+  height: min(720px, 80vh);
+  border-radius: 28px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.35);
+}
+.hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(1.05) contrast(1.02);
+}
+.hero-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+      90deg,
+      rgba(238, 242, 247, 0.95) 0%,
+      rgba(238, 242, 247, 0.65) 22%,
+      rgba(238, 242, 247, 0) 46%
+    ),
+    radial-gradient(
+      60% 100% at 120% 50%,
+      rgba(0, 0, 0, 0.25) 0%,
+      rgba(0, 0, 0, 0) 70%
+    );
+}
+/* --- Fix tiny overflow on the login view --- */
+
+/* 1) Safe box-sizing everywhere */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* 2) Prevent focus ring / shadows from leaking outside the card */
+.login-card {
+  padding: 26px 28px; /* a touch more right/left padding for safety */
+  overflow: hidden; /* clip any inner glow exactly to the card radius */
+}
+
+/* 3) Inputs: keep ring smaller so it never nudges past the card edge */
+.input {
+  width: 100%;
+}
+.input:focus {
+  /* was 6px — trim to 4px so it won’t ever poke past the rounded edge */
+  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.12);
+}
+
+/* 4) Kill unexpected horizontal scrollbars on the whole view */
+.login-shell {
+  overflow-x: hidden;
+}
+
+/* 5) Make sure the hero panel always fits within the viewport height */
+.hero-panel {
+  height: min(66vh, 680px);
+}
+@media (max-width: 1024px) {
+  .hero-panel {
+    height: 36vh;
+  }
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .login-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .hero-panel {
+    height: 36vh;
+  }
+}
+
+/* Mobile: hide hero, center form */
+@media (max-width: 960px) {
+  .login-screen {
+    grid-template-columns: 1fr;
+  }
+  .login-right {
+    display: none;
+  }
+}
+
+/* Settings & logout buttons on map view */
+#settingsBtn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 1200;
+  background: #0d6efd;
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#logoutBtn {
+  background: #ef4444;
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Keep graph buttons hidden for non-admins (existing rule) */
+.role-user #filter .graph-btn {
+  display: none !important;
+}
+
+/* Responsive */
+@media (max-width: 960px) {
+  .login-screen {
+    grid-template-columns: 1fr;
+  }
+  .login-right {
+    display: none;
+  }
+}
+/* Scope hero visuals to their pages only */
+.login-hero,
+.login-right,
+.hero-phone,
+.hero-copy,
+.settings-hero {
+  display: none !important;
+}
+
+/* Show them only when the page wrapper is present */
+.login-screen .login-right,
+.login-screen .login-hero,
+.login-screen .hero-phone,
+.login-screen .hero-copy,
+.settings-screen .settings-hero,
+.settings-screen .hero-phone,
+.settings-screen .hero-copy {
+  display: block !important;
+}
+/* Kill-stray safeguard: these visuals are hidden by default */
+.settings-hero,
+.login-hero,
+.hero-phone,
+.hero-copy,
+.settings-screen {
+  display: none !important;
+}
+
+/* They only show when inside the correct page wrapper */
+.login-screen .login-hero,
+.login-screen .hero-phone,
+.login-screen .hero-copy,
+.settings-screen .settings-hero,
+.settings-screen .hero-phone,
+.settings-screen .hero-copy {
+  display: block !important;
+}
+/* Settings Modal Overlay */
+.settings-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+  animation: fadeIn 0.3s ease;
+}
+
+/* Settings Modal Container */
+.settings-modal {
+  background: rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 2rem;
+  width: 420px;
+  max-width: 90%;
+  color: #fff;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  animation: slideUp 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+/* Modal Title */
+.settings-modal h2 {
+  font-size: 1.8rem;
+  margin-bottom: 1rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Input Fields */
+.settings-modal input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 10px;
+  border: none;
+  outline: none;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.settings-modal input::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Buttons */
+.settings-modal button {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: none;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.settings-modal .btn-primary {
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  color: white;
+}
+
+.settings-modal .btn-primary:hover {
+  background: linear-gradient(135deg, #3c9fee, #00d4e5);
+}
+
+.settings-modal .btn-danger {
+  background: rgba(255, 77, 77, 0.9);
+  color: white;
+  margin-top: 0.5rem;
+}
+
+.settings-modal .btn-danger:hover {
+  background: rgba(255, 50, 50, 1);
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+/* Replace background-based hero with an <img> */
+.login-hero {
+  width: min(760px, 92%);
+  aspect-ratio: 16 / 10;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+  background: none; /* no background image anymore */
+}
+
+.login-hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Optional: we’re not using these anymore */
+.hero-phone,
+.hero-copy {
+  display: none !important;
+}
+
+/* Ensure hero only shows on the login page (keeps map clean) */
+.login-hero {
+  display: none;
+}
+.login-screen .login-hero {
+  display: block;
+}
