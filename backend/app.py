@@ -1,4 +1,4 @@
-import io, os, datetime as dt, requests
+import io, os, datetime as dt, requests, subprocess, json, uuid
 import pandas as pd
 import numpy as np
 import matplotlib
@@ -10,6 +10,8 @@ import matplotlib.image as mpimg
 from fastapi import FastAPI, Query
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -20,12 +22,97 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "OPTIONS", "POST"],
     allow_headers=["*"],
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
+
+# --- Ensure static directory exists before mounting ---
+if not os.path.exists(STATIC_DIR):
+    os.makedirs(STATIC_DIR)
+
+# --- Mount static directory to serve analysis results ---
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# --- Analysis Request Model ---
+class AnalyzeRequest(BaseModel):
+    start_date: str
+    end_date: str
+    geometry: dict
+    index_type: str = "BOTH"
+
+# --- Analyze Endpoint ---
+@app.post("/analyze")
+def analyze_burn(req: AnalyzeRequest):
+    # 1. Setup unique job ID and output directory
+    job_id = str(uuid.uuid4())
+    out_dir = os.path.join(STATIC_DIR, "analysis", job_id)
+    os.makedirs(out_dir, exist_ok=True)
+    
+    # 2. Save AOI to a temporary JSON file
+    aoi_path = os.path.join(out_dir, "aoi.json")
+    feature = {"type": "Feature", "properties": {}, "geometry": req.geometry}
+    fc = {"type": "FeatureCollection", "features": [feature]}
+    
+    with open(aoi_path, "w") as f:
+        json.dump(fc, f)
+        
+    # 3. Locate the script
+    script_path = os.path.join(BASE_DIR, "agro.py")
+    if not os.path.exists(script_path):
+        # Fallback to older name if agro.py is missing
+        script_path = os.path.join(BASE_DIR, "burnfinder_agri_complete.py")
+        if not os.path.exists(script_path):
+            return JSONResponse(status_code=500, content={"error": "Analysis script not found on server."})
+
+    # 4. Construct Command
+    # python agro.py --start X --end Y --aoi Z --out O --index {req.index_type}
+    cmd = [
+        "python", script_path,
+        "--start", req.start_date,
+        "--end", req.end_date,
+        "--aoi", aoi_path,
+        "--out", out_dir,
+        "--index", req.index_type
+    ]
+    
+    # 5. Run Script (Blocking execution for simplicity)
+    try:
+        # Capture BOTH stdout and stderr so we can debug "No Data" or API errors
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        print("Script Output:", result.stdout)
+        
+        # --- NEW: Extract AI Analysis Text to send to Frontend ---
+        report_path = os.path.join(out_dir, "burn_dates.json")
+        ai_text = "Analysis complete, but AI report text not found in JSON."
+        
+        if os.path.exists(report_path):
+            try:
+                with open(report_path, "r") as f:
+                    data = json.load(f)
+                    # Safely get the analysis string
+                    ai_text = data.get("ai_analysis", "AI analysis field missing in JSON result.")
+            except Exception as e:
+                ai_text = f"Error reading result file: {str(e)}"
+
+        report_url = f"/static/analysis/{job_id}/burn_dates.json"
+        
+        # Return success AND the text
+        return {
+            "status": "success", 
+            "job_id": job_id, 
+            "report_url": report_url,
+            "ai_analysis": ai_text 
+        }
+
+    except subprocess.CalledProcessError as e:
+        # Combine Output so we see the REAL error (e.g. from stderr)
+        error_message = f"STDOUT: {e.stdout}\n\nSTDERR: {e.stderr}"
+        print("Script Failed:", error_message)
+        return JSONResponse(status_code=500, content={"status": "error", "message": error_message})
+
 
 @app.get("/")
 def serve_index():
@@ -412,4 +499,3 @@ def report_pdf(
     pdf_bytes=_build_pdf_report(site_type,lat,lon,df,rated_power_mw,panel_area_m2,panel_efficiency,props)
     return StreamingResponse(io.BytesIO(pdf_bytes),media_type="application/pdf",
                              headers={"Content-Disposition":"attachment; filename=weather_report.pdf"})
-

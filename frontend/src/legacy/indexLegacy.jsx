@@ -5,7 +5,8 @@ mapboxgl.accessToken =
   'pk.eyJ1IjoiaXNhYWtoYW4iLCJhIjoiY21iejFzMjUzMWlsczJqcXcwa2N4NHdtZSJ9.M7oGg-7sSbbNc0rl3596Jg';
 
 let map,
-  currentProvince = 'all';
+  currentProvince = 'all',
+  drawControl; // Global variable for draw control
 
 function toggleSidebar() {
   const el = document.getElementById('container');
@@ -28,6 +29,11 @@ function initializeMap(styleName = 'satellite-streets-v12') {
   map.on('load', () => {
     addLayersAndSources();
     initStyleSwitcher();
+
+    // --- FIX: Dynamically load Mapbox Draw, then add the control ---
+    loadDrawDependencies().then(() => {
+      addDrawControl();
+    });
   });
 
   map.once('style.load', initAtmosControls);
@@ -42,6 +48,83 @@ function initializeMap(styleName = 'satellite-streets-v12') {
     });
     return ret;
   };
+}
+
+// --- NEW: Helper to inject Mapbox Draw scripts if missing ---
+function loadDrawDependencies() {
+  return new Promise((resolve) => {
+    if (window.MapboxDraw) {
+      resolve();
+      return;
+    }
+
+    console.log('Injecting Mapbox Draw dependencies...');
+
+    // 1. Inject CSS
+    const cssLink = document.createElement('link');
+    cssLink.rel = 'stylesheet';
+    cssLink.href =
+      'https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css';
+    document.head.appendChild(cssLink);
+
+    // 2. Inject JS
+    const script = document.createElement('script');
+    script.src =
+      'https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js';
+    script.onload = () => {
+      console.log('Mapbox Draw loaded successfully.');
+      resolve();
+    };
+    script.onerror = (e) => {
+      console.error('Failed to load Mapbox Draw:', e);
+      resolve(); // Resolve anyway so the app doesn't crash
+    };
+    document.head.appendChild(script);
+  });
+}
+
+// --- NEW: Draw Control & Coordinate Storage Logic ---
+function addDrawControl() {
+  if (!window.MapboxDraw) {
+    console.warn('MapboxDraw not available even after injection attempt.');
+    return;
+  }
+
+  // Prevent adding duplicate controls if re-initialized
+  if (drawControl) {
+    try {
+      map.removeControl(drawControl);
+    } catch (e) {}
+  }
+
+  drawControl = new window.MapboxDraw({
+    displayControlsDefault: false,
+    controls: {
+      polygon: true,
+      trash: true,
+    },
+    defaultMode: 'simple_select',
+  });
+
+  // CHANGED: Moved from 'top-left' to 'bottom-left'
+  map.addControl(drawControl, 'bottom-left');
+
+  // Listen for draw events
+  map.on('draw.create', updateStoredCoordinates);
+  map.on('draw.update', updateStoredCoordinates);
+  map.on('draw.delete', updateStoredCoordinates);
+}
+
+function updateStoredCoordinates(e) {
+  if (!drawControl) return;
+  const data = drawControl.getAll();
+  if (data.features.length > 0) {
+    // Store coordinates in global window object
+    window.storedPolygon = data.features[0].geometry.coordinates;
+    console.log('Polygon Stored:', window.storedPolygon);
+  } else {
+    window.storedPolygon = null;
+  }
 }
 
 function initStyleSwitcher() {
@@ -194,6 +277,9 @@ function addLayersAndSources() {
 // ---------------- Popup binding ----------------
 function bindClicks(layerId, type) {
   map.on('click', layerId, (e) => {
+    // If we are currently drawing, don't open popups!
+    if (drawControl && drawControl.getMode() !== 'simple_select') return;
+
     const f = e.features && e.features[0];
     if (!f) return;
 

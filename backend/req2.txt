@@ -1,0 +1,14 @@
+numpy
+xarray
+rioxarray
+rasterio
+geopandas
+pystac-client
+planetary-computer
+stackstac
+tqdm
+click
+Pillow
+scipy
+pyproj
+requests
